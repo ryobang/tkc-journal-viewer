@@ -136,8 +136,7 @@ function formatDate(d: Date): string {
 }
 
 function headersMatchTkc(headers: string[]): boolean {
-  if (headers.length < TKC_HEADERS_44.length) return false;
-  // Check at least the first 6 critical headers and any 5 of the rest match
+  // Check at least the critical headers exist
   const required = ['月日', '借方科目コード', '借方科目名', '貸方科目コード', '貸方科目名', '元帳摘要'];
   for (const r of required) {
     if (!headers.includes(r)) return false;
@@ -146,69 +145,48 @@ function headersMatchTkc(headers: string[]): boolean {
   for (const h of TKC_HEADERS_44) {
     if (headers.includes(h)) matched++;
   }
-  return matched >= 30; // tolerate minor deviations
+  return matched >= 25; // tolerate column renames between xlsx(44列) and CSV(仕訳帳データ)
 }
 
-export async function parseTkcXlsx(buffer: Buffer): Promise<ParseResult> {
-  const wb = new ExcelJS.Workbook();
-  try {
-    const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-    await wb.xlsx.load(ab as ArrayBuffer);
-  } catch (e) {
+/**
+ * 抽出済みのヘッダ＋行データ(セル値の二次元配列)から仕訳を組み立てる。
+ * xlsx(44列)・CSV(仕訳帳データ49列) 双方で共通利用する。
+ */
+function buildResult(
+  sheetName: string,
+  headers: string[],
+  rows: ExcelJS.CellValue[][],
+): ParseResult {
+  if (!headersMatchTkc(headers)) {
     return {
-      ok: false,
-      isTkcFormat: false,
-      sheetName: '',
-      headers: [],
-      entries: [],
-      totalDebit: 0,
-      totalCredit: 0,
-      message: `Excelファイルを開けませんでした: ${(e as Error).message}`,
-    };
-  }
-
-  const ws = wb.worksheets[0];
-  if (!ws) {
-    return {
-      ok: false, isTkcFormat: false, sheetName: '', headers: [], entries: [],
-      totalDebit: 0, totalCredit: 0, message: 'シートが見つかりません',
-    };
-  }
-
-  const headerRow = ws.getRow(1);
-  const headers: string[] = [];
-  const lastCol = ws.actualColumnCount || ws.columnCount;
-  for (let c = 1; c <= lastCol; c++) {
-    headers.push(cellToString(headerRow.getCell(c).value).trim());
-  }
-
-  const isTkc = headersMatchTkc(headers);
-  if (!isTkc) {
-    return {
-      ok: true, isTkcFormat: false, sheetName: ws.name, headers, entries: [],
+      ok: true, isTkcFormat: false, sheetName, headers, entries: [],
       totalDebit: 0, totalCredit: 0,
-      message: 'TKC仕訳フォーマット(44列)ではありません',
+      message: 'TKC仕訳フォーマット(44列xlsx / 仕訳帳データCSV)ではありません',
     };
   }
 
   const colIndex = new Map<string, number>();
-  headers.forEach((h, i) => colIndex.set(h, i + 1));
-  const get = (row: ExcelJS.Row, name: string): ExcelJS.CellValue => {
-    const i = colIndex.get(name);
-    if (!i) return null;
-    return row.getCell(i).value;
+  headers.forEach((h, i) => {
+    if (!colIndex.has(h)) colIndex.set(h, i);
+  });
+  // 先に挙げた列名から順に探し、最初に見つかった列の値を返す(別名フォールバック)
+  const get = (row: ExcelJS.CellValue[], ...names: string[]): ExcelJS.CellValue => {
+    for (const name of names) {
+      const i = colIndex.get(name);
+      if (i !== undefined) return row[i] ?? null;
+    }
+    return null;
   };
 
   const entries: JournalEntry[] = [];
   let totalDebit = 0;
   let totalCredit = 0;
-  const lastRow = ws.actualRowCount || ws.rowCount;
-  for (let r = 2; r <= lastRow; r++) {
-    const row = ws.getRow(r);
+
+  rows.forEach((row, idx) => {
     const dateCell = get(row, '月日');
     const debitCode = cellToString(get(row, '借方科目コード'));
     const creditCode = cellToString(get(row, '貸方科目コード'));
-    if (!dateCell && !debitCode && !creditCode) continue;
+    if (!dateCell && !debitCode && !creditCode) return;
 
     const { iso, raw } = cellToDateIso(dateCell);
 
@@ -247,19 +225,22 @@ export async function parseTkcXlsx(buffer: Buffer): Promise<ParseResult> {
       netAmount: cellToNumber(get(row, '貸方税抜き金額')),
     };
 
-    const realPurchase = cellToDateIso(get(row, '実際の仕入れ年月日１')).iso;
+    const realPurchase = cellToDateIso(get(row, '実際の仕入れ年月日１', '実際の仕入れ年月日')).iso;
+    // 伝票番号が無いCSV(仕訳帳データ)では入力番号で複合仕訳をまとめる
+    const voucherNo = cellToString(get(row, '伝票番号')) || cellToString(get(row, '入力番号'));
 
     entries.push({
-      rowIndex: r,
+      rowIndex: idx + 2,
       date: iso,
       dateRaw: raw,
-      voucherNo: cellToString(get(row, '伝票番号')),
+      voucherNo,
       evidenceNo: cellToString(get(row, '証憑番号')).trim(),
       debit,
       credit,
       partnerCode: cellToString(get(row, '取引先コード')),
       partnerName: cellToString(get(row, '取引先名')),
-      partnerTNumber: cellToString(get(row, '取引先の事業者登録番号')),
+      // CSVでは「適格請求書発行事業者」列がインボイス登録番号(T番号)
+      partnerTNumber: cellToString(get(row, '取引先の事業者登録番号', '適格請求書発行事業者')),
       memo: cellToString(get(row, '元帳摘要')),
       realPurchaseDate: realPurchase,
       incomeKbnCode: cellToString(get(row, '収支区分コード')),
@@ -269,15 +250,136 @@ export async function parseTkcXlsx(buffer: Buffer): Promise<ParseResult> {
     });
     totalDebit += debit.amount;
     totalCredit += credit.amount;
-  }
+  });
 
   return {
     ok: true,
     isTkcFormat: true,
-    sheetName: ws.name,
+    sheetName,
     headers,
     entries,
     totalDebit,
     totalCredit,
   };
+}
+
+/** 拡張子に応じて xlsx / csv を判別して解析する。 */
+export async function parseTkc(buffer: Buffer, fileName: string): Promise<ParseResult> {
+  if (/\.csv$/i.test(fileName)) {
+    return parseTkcCsv(buffer);
+  }
+  return parseTkcXlsx(buffer);
+}
+
+export async function parseTkcXlsx(buffer: Buffer): Promise<ParseResult> {
+  const wb = new ExcelJS.Workbook();
+  try {
+    const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+    await wb.xlsx.load(ab as ArrayBuffer);
+  } catch (e) {
+    return {
+      ok: false,
+      isTkcFormat: false,
+      sheetName: '',
+      headers: [],
+      entries: [],
+      totalDebit: 0,
+      totalCredit: 0,
+      message: `Excelファイルを開けませんでした: ${(e as Error).message}`,
+    };
+  }
+
+  const ws = wb.worksheets[0];
+  if (!ws) {
+    return {
+      ok: false, isTkcFormat: false, sheetName: '', headers: [], entries: [],
+      totalDebit: 0, totalCredit: 0, message: 'シートが見つかりません',
+    };
+  }
+
+  const lastCol = ws.actualColumnCount || ws.columnCount;
+  const headerRow = ws.getRow(1);
+  const headers: string[] = [];
+  for (let c = 1; c <= lastCol; c++) {
+    headers.push(cellToString(headerRow.getCell(c).value).trim());
+  }
+
+  const rows: ExcelJS.CellValue[][] = [];
+  const lastRow = ws.actualRowCount || ws.rowCount;
+  for (let r = 2; r <= lastRow; r++) {
+    const row = ws.getRow(r);
+    const values: ExcelJS.CellValue[] = [];
+    for (let c = 1; c <= lastCol; c++) {
+      values.push(row.getCell(c).value);
+    }
+    rows.push(values);
+  }
+
+  return buildResult(ws.name, headers, rows);
+}
+
+export function parseTkcCsv(buffer: Buffer): ParseResult {
+  let table: string[][];
+  try {
+    table = parseCsv(decodeText(buffer));
+  } catch (e) {
+    return {
+      ok: false, isTkcFormat: false, sheetName: '', headers: [], entries: [],
+      totalDebit: 0, totalCredit: 0,
+      message: `CSVファイルを開けませんでした: ${(e as Error).message}`,
+    };
+  }
+  if (table.length === 0) {
+    return {
+      ok: true, isTkcFormat: false, sheetName: 'CSV', headers: [], entries: [],
+      totalDebit: 0, totalCredit: 0, message: '空のCSVファイルです',
+    };
+  }
+  const headers = table[0].map(h => h.trim());
+  const rows: ExcelJS.CellValue[][] = table.slice(1);
+  return buildResult('仕訳帳データ', headers, rows);
+}
+
+/** UTF-8(BOM有無)優先、不可なら Shift_JIS としてデコードする。 */
+function decodeText(buffer: Buffer): string {
+  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    return buffer.toString('utf8', 3);
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+  } catch {
+    try {
+      return new TextDecoder('shift_jis').decode(buffer);
+    } catch {
+      return buffer.toString('utf8');
+    }
+  }
+}
+
+/** RFC4180 準拠の最小CSVパーサ(ダブルクォート・改行埋め込み対応)。 */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+    if (ch === '"') { inQuotes = true; }
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\r') { /* skip */ }
+    else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else { field += ch; }
+  }
+  if (field !== '' || row.length > 0) { row.push(field); rows.push(row); }
+  // 完全に空の行は除外する
+  return rows.filter(r => r.some(c => c.trim() !== ''));
 }

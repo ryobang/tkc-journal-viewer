@@ -1,8 +1,8 @@
 {
   "name": "tkc-journal-viewer",
   "displayName": "TKC仕訳帳ビューアー",
-  "description": "TKC読み込み用Excel仕訳ファイル(.xlsx)を仕訳帳形式で表示します",
-  "version": "0.1.7",
+  "description": "TKC読み込み用Excel仕訳ファイル(.xlsx)・FX2仕訳帳データ(.csv)を仕訳帳形式で表示します",
+  "version": "0.1.8",
   "publisher": "bang-local",
   "license": "MIT",
   "repository": {
@@ -16,7 +16,7 @@
     "vscode": "^1.85.0"
   },
   "categories": ["Visualization", "Other"],
-  "keywords": ["TKC", "仕訳帳", "会計", "accounting", "xlsx", "journal"],
+  "keywords": ["TKC", "仕訳帳", "会計", "accounting", "xlsx", "csv", "FX2", "journal"],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
@@ -26,7 +26,8 @@
         "displayName": "TKC仕訳帳ビューアー",
         "selector": [
           { "filenamePattern": "*.xlsx" },
-          { "filenamePattern": "*.xlsm" }
+          { "filenamePattern": "*.xlsm" },
+          { "filenamePattern": "*.csv" }
         ],
         "priority": "option"
       }
@@ -42,7 +43,7 @@
       "explorer/context": [
         {
           "command": "tkcJournal.openWith",
-          "when": "resourceExtname == .xlsx || resourceExtname == .xlsm",
+          "when": "resourceExtname == .xlsx || resourceExtname == .xlsm || resourceExtname == .csv",
           "group": "navigation@50"
         }
       ]

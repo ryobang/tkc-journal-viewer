@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { exec } from 'child_process';
-import { parseTkcXlsx, ParseResult } from './parser';
+import { parseTkc, ParseResult } from './parser';
 import { renderHtml } from './webview';
 
 const VIEW_TYPE = 'tkcJournal.viewer';
@@ -17,7 +17,7 @@ class TkcJournalEditorProvider implements vscode.CustomReadonlyEditorProvider<Tk
 
   async openCustomDocument(uri: vscode.Uri): Promise<TkcDocument> {
     const buf = await readUri(uri);
-    const result = await parseTkcXlsx(buf);
+    const result = await parseTkc(buf, uri.fsPath);
     return new TkcDocument(uri, result);
   }
 
@@ -54,7 +54,7 @@ class TkcJournalEditorProvider implements vscode.CustomReadonlyEditorProvider<Tk
           await openInExcel(document.uri);
         } else if (msg.type === 'reload') {
           const buf = await readUri(document.uri);
-          document.result = await parseTkcXlsx(buf);
+          document.result = await parseTkc(buf, document.uri.fsPath);
           panel.webview.html = renderHtml({
             fileName,
             result: document.result,
