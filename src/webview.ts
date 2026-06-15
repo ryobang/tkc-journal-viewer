@@ -4,7 +4,7 @@ export interface RenderOptions {
   fileName: string;
   result: ParseResult;
   cspSource: string;
-  config: { dateFormat: string; zeroAmount: string };
+  config: { dateFormat: string; zeroAmount: string; defaultFontSize?: number };
   /** ポップアップ(別ウィンドウ)で開いたときに引き継ぐ表示状態 */
   initial?: { filter?: string; month?: string; fontPx?: number };
 }
@@ -54,9 +54,7 @@ export function renderHtml(opts: RenderOptions): string {
       <button id="popout" title="表示中の内容を別ウィンドウで開く(別モニターへ移動可能)">別ウィンドウ</button>
       <span class="fontsize">
         <button id="fontDec" title="文字を小さく">A−</button>
-        <span class="lvl" id="fontLvl">13px</span>
         <button id="fontInc" title="文字を大きく">A＋</button>
-        <button id="fontReset" title="文字サイズを既定に戻す">既定</button>
       </span>
     </div>
   </header>
@@ -131,8 +129,9 @@ function baseCss(): string {
 html,body { margin:0; padding:0; height:100%; font-family: "Segoe UI", "Yu Gothic UI", "Meiryo", system-ui, sans-serif; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
 body { font-size: var(--tkc-font, 13px); }
 .fontsize { display:flex; gap:2px; align-items:center; }
-.fontsize button { padding:4px 8px; background: var(--vscode-button-secondaryBackground, var(--vscode-button-background)); color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground)); border:none; border-radius:3px; cursor:pointer; font-size:.9em; line-height:1; }
-.fontsize .lvl { min-width:42px; text-align:center; opacity:.7; font-size:.8em; font-variant-numeric: tabular-nums; }
+.fontsize button { padding:3px 6px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); opacity:.8; border:1px solid var(--vscode-input-border, transparent); border-radius:3px; cursor:pointer; font-size:.78em; line-height:1; }
+.fontsize button:hover { opacity:1; }
+.fontsize .lvl { min-width:38px; text-align:center; opacity:.55; font-size:.72em; font-variant-numeric: tabular-nums; }
 #app { display:flex; flex-direction:column; height:100vh; }
 .bar { display:flex; align-items:center; gap:12px; padding:8px 12px; border-bottom:1px solid var(--vscode-panel-border); flex-wrap:wrap; }
 .title { font-weight:600; flex:1 1 auto; min-width:200px; }
@@ -166,6 +165,7 @@ td.acct .code { opacity:.55; font-size:.85em; margin-right:4px; font-variant-num
 td.acct .sub { display:block; opacity:.7; font-size:.85em; margin-top:1px; }
 td.acct .dept { display:block; opacity:.6; font-size:.8em; margin-top:1px; }
 td.tax .auto { font-size:.7em; opacity:.6; display:block; }
+td.tax .rate { display:block; font-size:.85em; opacity:.5; font-weight:400; }
 td.tax .rate8 { display:block; font-size:.85em; opacity:1; font-weight:600; color: var(--vscode-charts-orange, var(--vscode-foreground)); }
 .tnum { display:block; opacity:.55; font-size:.75em; font-variant-numeric: tabular-nums; }
 .empty { padding:24px; text-align:center; opacity:.6; }
@@ -188,7 +188,7 @@ function clientScript(): string {
 (function(){
   const vscode = acquireVsCodeApi();
   const data = window.__TKC__;
-  const cfg = data.config || { dateFormat: 'MM/DD', zeroAmount: 'blank' };
+  const cfg = data.config || { dateFormat: 'MM/DD', zeroAmount: 'blank', defaultFontSize: 13 };
   const entries = data.entries || [];
 
   const $ = (id) => document.getElementById(id);
@@ -310,14 +310,12 @@ function clientScript(): string {
         + '<td class=\"c-acct acct\">' + debitAcct + '</td>'
         + '<td class=\"c-amt amt' + (e.debit.amount ? '' : ' zero') + '\">' + escapeHtml(fmtAmount(e.debit.amount)) + '</td>'
         + '<td class=\"c-tax tax\">' + escapeHtml(e.debit.taxKbn || '')
-          + (function(){ const l = fmtTaxRateLabel(e.debit); return l ? '<span class=\"rate8\">' + escapeHtml(l) + '</span>' : ''; })()
-          + (e.debit.taxAmount ? '<span class=\"auto\">税 ' + Number(e.debit.taxAmount).toLocaleString('ja-JP') + '</span>' : '')
+          + taxRateHtml(e.debit)
           + '</td>'
         + '<td class=\"c-acct acct\">' + creditAcct + '</td>'
         + '<td class=\"c-amt amt' + (e.credit.amount ? '' : ' zero') + '\">' + escapeHtml(fmtAmount(e.credit.amount)) + '</td>'
         + '<td class=\"c-tax tax\">' + escapeHtml(e.credit.taxKbn || '')
-          + (function(){ const l = fmtTaxRateLabel(e.credit); return l ? '<span class=\"rate8\">' + escapeHtml(l) + '</span>' : ''; })()
-          + (e.credit.taxAmount ? '<span class=\"auto\">税 ' + Number(e.credit.taxAmount).toLocaleString('ja-JP') + '</span>' : '')
+          + taxRateHtml(e.credit)
           + '</td>'
         + '<td class=\"c-partner\">' + partnerHtml + '</td>'
         + '<td class=\"c-memo\">' + escapeHtml(e.memo || '') + '</td>'
@@ -349,12 +347,19 @@ function clientScript(): string {
   function fmtTaxRateLabel(side) {
     const kbn = String(side.taxKbn || '').trim();
     if (!/^[1567]/.test(kbn)) return '';
-    const reduced = String(side.taxReduced == null ? '' : side.taxReduced).trim();
     const rate = String(side.taxRate == null ? '' : side.taxRate).trim().replace(/%/g, '');
+    if (!rate) return '';
+    const reduced = String(side.taxReduced == null ? '' : side.taxReduced).trim();
     const isReduced = reduced === '1' || reduced === '○' || reduced === 'は' || reduced.toLowerCase() === 'true';
     const is8 = rate === '8' || rate === '8.0' || rate === '08';
     if (isReduced && is8) return '軽8%';
-    return '';
+    return rate + '%';
+  }
+  function taxRateHtml(side) {
+    const l = fmtTaxRateLabel(side);
+    if (!l) return '';
+    const cls = l.indexOf('軽') >= 0 ? 'rate8' : 'rate';
+    return '<span class=\"' + cls + '\">' + escapeHtml(l) + '</span>';
   }
 
   function formatAcct(side) {
@@ -376,9 +381,11 @@ function clientScript(): string {
   // 別ウィンドウ(フローティング)で開く。現在の検索/月フィルタを引き継ぐ。
   // 実体はVSCodeの独立Webviewパネルを開き、拡張側で別ウィンドウへ移動させる。
   // ----- 文字サイズ -----
-  const FONT_MIN = 9, FONT_MAX = 28, FONT_DEFAULT = 13;
-  const fontLvl = $('fontLvl');
+  const FONT_MIN = 9, FONT_MAX = 28;
   function clampFont(px) { return Math.min(FONT_MAX, Math.max(FONT_MIN, Math.round(px))); }
+  // 既定サイズは設定(tkcJournal.defaultFontSize)から。未設定なら13px。
+  const FONT_DEFAULT = clampFont(Number(cfg.defaultFontSize) || 13);
+  const fontLvl = $('fontLvl');
   let fontPx = FONT_DEFAULT;
   function applyFont(px, persist) {
     fontPx = clampFont(px);
@@ -392,7 +399,6 @@ function clientScript(): string {
   }
   $('fontInc').addEventListener('click', () => applyFont(fontPx + 1));
   $('fontDec').addEventListener('click', () => applyFont(fontPx - 1));
-  $('fontReset').addEventListener('click', () => applyFont(FONT_DEFAULT));
 
   $('popout').addEventListener('click', () => vscode.postMessage({
     type: 'popout',

@@ -2,7 +2,7 @@
   "name": "tkc-journal-viewer",
   "displayName": "TKC仕訳帳ビューアー",
   "description": "TKC読み込み用Excel仕訳ファイル(.xlsx)・FX2仕訳帳データ(.csv)を仕訳帳形式で表示します",
-  "version": "0.1.8",
+  "version": "0.1.11",
   "publisher": "bang-local",
   "license": "MIT",
   "repository": {
@@ -62,6 +62,13 @@
           "enum": ["blank", "zero", "dash"],
           "default": "blank",
           "description": "ゼロ金額の表示方法"
+        },
+        "tkcJournal.defaultFontSize": {
+          "type": "number",
+          "default": 13,
+          "minimum": 9,
+          "maximum": 28,
+          "description": "仕訳帳ビューを開いたときの既定の文字サイズ(px, 9〜28)。画面上のA−/A＋で一時的に拡大縮小できます"
         }
       }
     }

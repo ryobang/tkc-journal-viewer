@@ -133,6 +133,7 @@ function getConfig() {
   return {
     dateFormat: c.get<string>('dateFormat', 'MM/DD'),
     zeroAmount: c.get<string>('zeroAmount', 'blank'),
+    defaultFontSize: c.get<number>('defaultFontSize', 13),
   };
 }
 
