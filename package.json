@@ -1,0 +1,82 @@
+{
+  "name": "tkc-journal-viewer",
+  "displayName": "TKC仕訳帳ビューアー",
+  "description": "TKC読み込み用Excel仕訳ファイル(.xlsx)を仕訳帳形式で表示します",
+  "version": "0.1.7",
+  "publisher": "bang-local",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ryobang/tkc-journal-viewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ryobang/tkc-journal-viewer/issues"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Visualization", "Other"],
+  "keywords": ["TKC", "仕訳帳", "会計", "accounting", "xlsx", "journal"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "tkcJournal.viewer",
+        "displayName": "TKC仕訳帳ビューアー",
+        "selector": [
+          { "filenamePattern": "*.xlsx" },
+          { "filenamePattern": "*.xlsm" }
+        ],
+        "priority": "option"
+      }
+    ],
+    "commands": [
+      {
+        "command": "tkcJournal.openWith",
+        "title": "TKC仕訳帳ビューアーで開く",
+        "category": "TKC仕訳帳"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "tkcJournal.openWith",
+          "when": "resourceExtname == .xlsx || resourceExtname == .xlsm",
+          "group": "navigation@50"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "TKC仕訳帳ビューアー",
+      "properties": {
+        "tkcJournal.dateFormat": {
+          "type": "string",
+          "enum": ["MM/DD", "M/D", "YYYY-MM-DD"],
+          "default": "MM/DD",
+          "description": "日付の表示形式"
+        },
+        "tkcJournal.zeroAmount": {
+          "type": "string",
+          "enum": ["blank", "zero", "dash"],
+          "default": "blank",
+          "description": "ゼロ金額の表示方法"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  }
+}
