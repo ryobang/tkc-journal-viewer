@@ -46,17 +46,6 @@ code --install-extension tkc-journal-viewer-0.1.7.vsix
 - 1ファイルにつき先頭シートのみ対象
 - 数式セルは計算結果が無いと0として扱う場合あり
 
-## 開発
-
-```powershell
-npm install
-npm run compile     # 一回コンパイル
-npm run watch       # ファイル監視で自動コンパイル
-npm run package     # vsixを生成
-```
-
-`F5` で Extension Development Host を起動してデバッグできます。タグ `v*` を push すると GitHub Actions が .vsix をビルドして Release に添付します。
-
 ## ライセンス
 
 MIT
