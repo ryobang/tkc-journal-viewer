@@ -30,7 +30,7 @@ irm https://raw.githubusercontent.com/ryobang/tkc-journal-viewer/main/install.ps
 手動で入れる場合:
 
 ```powershell
-code --install-extension tkc-journal-viewer-0.1.12.vsix
+code --install-extension tkc-journal-viewer-0.1.13.vsix
 ```
 
 ## 設定

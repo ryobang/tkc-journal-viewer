@@ -2,7 +2,7 @@
   "name": "tkc-journal-viewer",
   "displayName": "TKC仕訳帳ビューアー",
   "description": "TKC読み込み用Excel仕訳ファイル(.xlsx)・FX2仕訳帳データ(.csv)を仕訳帳形式で表示します",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "publisher": "bang-local",
   "license": "MIT",
   "repository": {
