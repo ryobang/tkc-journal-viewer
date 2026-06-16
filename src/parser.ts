@@ -239,8 +239,9 @@ function buildResult(
       credit,
       partnerCode: cellToString(get(row, '取引先コード')),
       partnerName: cellToString(get(row, '取引先名')),
-      // CSVでは「適格請求書発行事業者」列がインボイス登録番号(T番号)
-      partnerTNumber: cellToString(get(row, '取引先の事業者登録番号', '適格請求書発行事業者')),
+      // インボイス登録番号(T番号)。様式ごとに列名が異なるため別名で吸収する
+      // xlsx読込: 適格請求書発行事業者の登録番号 / CSV仕訳帳: 適格請求書発行事業者 / 44列定数: 取引先の事業者登録番号
+      partnerTNumber: cellToString(get(row, '取引先の事業者登録番号', '適格請求書発行事業者の登録番号', '適格請求書発行事業者')),
       memo: cellToString(get(row, '元帳摘要')),
       realPurchaseDate: realPurchase,
       incomeKbnCode: cellToString(get(row, '収支区分コード')),
